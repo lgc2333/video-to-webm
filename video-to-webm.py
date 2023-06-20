@@ -126,12 +126,25 @@ try:
     ffmpeg.output(input_video, f"{tmp_path_name}/%d.png").run()
 
     print("Converting to webm... / 转换为 webm ...")
-    (
-        ffmpeg.input(f"{tmp_path_name}/%d.png", framerate=frame_rate)
-        .output(str(output_file), format="webm", pix_fmt="yuva420p")
-        .overwrite_output()
-        .run()
-    )
+    out_kwargs = {}
+    for i in range(2):
+        (
+            ffmpeg.input(f"{tmp_path_name}/%d.png", framerate=frame_rate)
+            .output(str(output_file), format="webm", pix_fmt="yuva420p", **out_kwargs)
+            .overwrite_output()
+            .run()
+        )
+        if output_file.stat().st_size <= 256 * 1024:
+            break
+
+        if not i:
+            print(
+                "File size is larger than 256 KB. Reduce quality... / 文件大小超过 256 KB，降低质量...",
+            )
+            out_kwargs["crf"] = 20
+            out_kwargs["b:v"] = "600k"
+        else:
+            print("File is still too large. / 文件仍然过大。")
 
 finally:
     shutil.rmtree(tmp_path)
