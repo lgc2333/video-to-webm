@@ -90,7 +90,10 @@ input_video = ffmpeg.input(str(input_file)).video
 if input_stream.width != 512 or input_stream.height != 512:
     if not prompt("File size is not 512x512. Scale? / 文件画幅不是 512x512，是否缩放？"):
         exit()
-    use_nearest = args.nearest or prompt("Use nearest neighbor scaling? / 是否使用最近邻插值缩放？")
+    use_nearest = args.nearest or prompt(
+        "Use nearest neighbor scaling? / 是否使用最近邻插值缩放？",
+        default=args.nearest,
+    )
     width, height = (512, -1) if input_stream.width > input_stream.height else (-1, 512)
     kwargs = {
         "width": width,
