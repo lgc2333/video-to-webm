@@ -2,18 +2,18 @@
 
 # Video To WebM
 
-This is a simple script that converts a video or gif file to Telegram WebM video sticker format using `ffmpeg`.
-
+This is a simple script that converts a video or gif file to Telegram WebM video sticker format using `ffmpeg`.  
 这是一个简单的脚本，使用 `ffmpeg` 将视频或 gif 文件转换为 Telegram WebM 视频贴纸格式。
 
 ## Requirements / 依赖
 
 - Python 3.6+ (developed with Python 3.10.10 / 使用 Python 3.10.10 开发)
 - [ffmpeg & ffprobe](https://ffmpeg.org/download.html)
-- Required Python packages (install with command below) / 需要的 Python 包（使用下面的命令安装）：
+- Required Python packages: (install with command below)  
+  需要的 Python 包：（使用下面的命令安装）
 
   ```bash
-  pip install pydantic ffmpeg-python
+  pip install cookit ffmpeg-python
   ```
 
 ## Usage / 用法
@@ -40,16 +40,13 @@ options / 参数:
 
 ## Sponsor Me / 赞助我
 
-- [AFDian / 爱发电](https://afdian.net/@lgc2333)
-- <details>
-    <summary>QR Code / 收款码 (Click to expand / 点击展开)</summary>
+**[Click here for more information  
+点击这里获取更多信息](https://blog.lgc2333.top/donate)**
 
-  ![讨饭](https://raw.githubusercontent.com/lgc2333/ShigureBotMenu/master/src/imgs/sponsor.png)
-
-  </details>
+Thanks for your support! Your support will make me continue to create contents!  
+感谢大家的赞助！你们的赞助将是我继续创作的动力！
 
 ## License / 许可证
 
-This project is licensed under the terms of the MIT license. See [LICENSE](LICENSE) for more information.
-
+This project is licensed under the terms of the MIT license. See [LICENSE](LICENSE) for more information.  
 本项目使用 MIT 许可证授权。有关更多信息，请参见 [LICENSE](LICENSE)。
