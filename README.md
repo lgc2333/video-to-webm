@@ -7,7 +7,7 @@ This is a simple script that converts a video or gif file to Telegram WebM video
 
 ## Requirements / 依赖
 
-- Python 3.6+ (developed with Python 3.10.10 / 使用 Python 3.10.10 开发)
+- Python 3.9+ (developed with Python 3.10.10 / 使用 Python 3.10.10 开发)
 - [ffmpeg & ffprobe](https://ffmpeg.org/download.html)
 - Required Python packages: (install with command below)  
   需要的 Python 包：（使用下面的命令安装）
@@ -19,16 +19,27 @@ This is a simple script that converts a video or gif file to Telegram WebM video
 ## Usage / 用法
 
 ```text
-usage / 用法: video-to-webm.py [-h] [-i INPUT] [-o OUTPUT] [-n] [-y]
+usage: video-to-webm.py [-h] [-i [INPUT ...]] [-o OUTPUT] [-n | --nearest | --no-nearest] [-y]
 
-options / 参数:
-  -h, --help            show this help message and exit / 显示此帮助消息并退出
-  -i INPUT, --input INPUT
-                        input file / 输入文件路径（如果未指定则提示）
+options:
+  -h, --help
+          show this help message and exit
+
+  -i [INPUT ...], --input [INPUT ...]
+          input files or folders (prompted if not specified, can be specified multiple times, or specify a folder)
+          输入文件或文件夹路径（如果未指定则提示，可指定多项，或 指定一个文件夹）
+
   -o OUTPUT, --output OUTPUT
-                        output file / 输出文件路径（默认为输入文件名）
-  -n, --nearest         use nearest neighbor scaling / 使用最近邻插值缩放
-  -y, --yes             default to all prompts (overwrite output file, etc.) / 默认使用所有提示的默认值（覆盖输出文件等）
+          output folder (defaults to "output" folder under current working directory)
+          输出文件夹（默认为工作目录下的 output 文件夹）
+
+  -n, --nearest, --no-nearest
+          use nearest neighbor scaling
+          是否使用最近邻插值缩放
+
+  -y, --yes
+          default to all prompts (overwrite output file, etc.)
+          默认使用所有提示的默认值（覆盖输出文件等）
 ```
 
 ## Contact / 联系方式

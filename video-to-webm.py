@@ -43,7 +43,7 @@ parser.add_argument(
     "--nearest",
     action=BooleanOptionalAction,
     default=None,
-    help="use nearest neighbor scaling / 使用最近邻插值缩放",
+    help="use nearest neighbor scaling / 是否使用最近邻插值缩放",
 )
 parser.add_argument(
     "-y",
