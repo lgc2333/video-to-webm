@@ -1,12 +1,20 @@
-from argparse import ArgumentParser
-from dataclasses import dataclass
+import asyncio
+import traceback
+from argparse import ArgumentParser, BooleanOptionalAction
+from asyncio import Semaphore, Task
+from asyncio.subprocess import DEVNULL, PIPE
+from contextlib import suppress
+from contextvars import ContextVar
 from pathlib import Path
 from tempfile import TemporaryDirectory
-from typing import Any, Callable, Iterator, List, Optional, TypeVar, overload
+from typing import Any, Callable, Iterator, List, Optional, Sequence, TypeVar, overload
 from typing_extensions import TypeAlias, override
+from weakref import WeakSet
 
 import ffmpeg
 from cookit import flatten
+from cookit.pyd import type_validate_python
+from pydantic import BaseModel
 
 parser = ArgumentParser()
 parser.add_argument(
@@ -33,7 +41,8 @@ parser.add_argument(
 parser.add_argument(
     "-n",
     "--nearest",
-    action="store_true",
+    action=BooleanOptionalAction,
+    default=None,
     help="use nearest neighbor scaling / 使用最近邻插值缩放",
 )
 parser.add_argument(
@@ -49,22 +58,22 @@ parser.add_argument(
 args = parser.parse_args()
 yes = args.yes
 
+process_sem = Semaphore(4)
+processing_filename = ContextVar[str]("processing_filename")
 
 T = TypeVar("T")
 
 InputTransformer: TypeAlias = Callable[[str], T]
 
 
-@dataclass
-class FFProbeInfoStream:
+class FFProbeInfoStream(BaseModel):
     width: int
     height: int
     duration: float
     avg_frame_rate: str
 
 
-@dataclass
-class FFProbeInfo:
+class FFProbeInfo(BaseModel):
     streams: List[FFProbeInfoStream]
 
 
@@ -91,12 +100,28 @@ def iter_all_files(path: Path) -> Iterator[Path]:
 def prompt(question: str, default: bool = True) -> bool:
     if yes:
         return default
-    y_str = "y" if default else "Y"
+    y_str = "Y" if default else "n"
     n_str = "n" if default else "N"
     response = input(f"{question} [{y_str}/{n_str}] ").lower()
     if not response:
         return default
     return response == "y"
+
+
+def ctx_print(*msg: str):
+    if msg:
+        with suppress(Exception):
+            filename = processing_filename.get()
+            m_0, *ms = msg
+            return print(f"{filename} | {m_0}", *ms)
+    return print(*msg)
+
+
+def ctx_prompt(question: str, default: bool = True) -> bool:
+    with suppress(Exception):
+        filename = processing_filename.get()
+        return prompt(f"{filename} | {question}", default)
+    return prompt(question, default)
 
 
 @overload
@@ -115,7 +140,7 @@ def input_multi(
 
     items = []
     while True:
-        item = input("> ")
+        item = input(f"No. {len(items) + 1} > ")
         if not item:
             break
         if transformer:
@@ -130,22 +155,40 @@ def input_multi(
 
 
 def input_file_transformer(path_str: str) -> List[Path]:
-    path = Path(path_str)
+    path = Path(path_str.strip("'\""))
     if not path.exists():
         raise ValidationError(f"File does not exist / 文件不存在 ({path})")
     return list(iter_all_files(path))
 
 
-def process_one(input_path: Path, output_path: Path):
+async def run(commands: Sequence[str]):
+    proc = await asyncio.create_subprocess_exec(
+        *commands,
+        stdin=DEVNULL,
+        stdout=PIPE,
+        stderr=PIPE,
+    )
+    code = await proc.wait()
+    if code != 0:
+        raise RuntimeError(f"Execute command {commands} failed")
+    return proc
+
+
+async def process_one(input_path: Path, output_path: Path):
+    ctx_print("Start processing / 开始处理")
+
     if output_path.exists() and (
-        not prompt(
+        not ctx_prompt(
             "Output file already exists. Overwrite? / 输出文件已存在，是否覆盖？",
         )
     ):
-        print("Skip converting / 跳过转换")
+        ctx_print("Skip converting / 跳过转换")
         return
 
-    input_info = FFProbeInfo(**ffmpeg.probe(str(input_path)))
+    input_info = type_validate_python(
+        FFProbeInfo,
+        await asyncio.to_thread(ffmpeg.probe, str(input_path)),
+    )
     input_stream = input_info.streams[0]
 
     fr1, fr2 = input_stream.avg_frame_rate.split("/")
@@ -154,13 +197,16 @@ def process_one(input_path: Path, output_path: Path):
     input_video = ffmpeg.input(str(input_path)).video
 
     if input_stream.width != 512 or input_stream.height != 512:
-        if not prompt(
+        if not ctx_prompt(
             "File size is not 512x512. Scale? / 文件画幅不是 512x512，是否缩放？",
         ):
-            exit()
-        use_nearest = args.nearest or prompt(
-            "Use nearest neighbor scaling? / 是否使用最近邻插值缩放？",
-            default=args.nearest,
+            return
+        use_nearest = (
+            ctx_prompt(
+                "Use nearest neighbor scaling? / 是否使用最近邻插值缩放？",
+            )
+            if args.nearest is None
+            else bool(args.nearest)
         )
         width, height = (
             (512, -1) if input_stream.width > input_stream.height else (-1, 512)
@@ -176,30 +222,31 @@ def process_one(input_path: Path, output_path: Path):
         )
 
     if frame_rate > 30:
-        if not prompt(
+        if not ctx_prompt(
             "Frame rate is higher than 30. Reduce? / 帧率高于 30，是否降低？",
         ):
-            exit()
+            return
         input_video = input_video.filter("fps", fps=30, round="down")
+        frame_rate = 30
 
     if input_stream.duration > 3:
-        if not prompt(
+        if not ctx_prompt(
             "Video is longer than 3 seconds. Speed up? / 视频长度超过 3 秒，是否加速？",
         ):
-            exit()
+            return
         speed = 3 / input_stream.duration
         input_video = input_video.filter("setpts", f"{speed}*PTS")
 
     with TemporaryDirectory() as tmp_path_name:
         tmp_path_png_expr = str(Path(tmp_path_name) / "%d.png")
 
-        print("Converting to png frames... / 转换为 png 帧...")
-        ffmpeg.output(input_video, tmp_path_png_expr).run()
+        ctx_print("Converting to png frames... / 转换为 png 帧...")
+        await run(ffmpeg.output(input_video, tmp_path_png_expr).compile())
 
-        print("Converting to webm... / 转换为 webm ...")
+        ctx_print("Converting to webm... / 转换为 webm ...")
         out_kwargs = {}
         for i in range(2):
-            (
+            await run(
                 ffmpeg.input(tmp_path_png_expr, framerate=frame_rate)
                 .output(
                     str(output_path),
@@ -208,35 +255,35 @@ def process_one(input_path: Path, output_path: Path):
                     **out_kwargs,
                 )
                 .overwrite_output()
-                .run()
+                .compile(),
             )
             if output_path.stat().st_size <= 256 * 1024:
-                print("Transform Done! / 转换完成!")
+                ctx_print("Transform Done! / 转换完成!")
                 break
 
             if not i:
-                print(
+                ctx_print(
                     "File size is larger than 256 KB. Reduce quality... / "
                     "文件大小超过 256 KB，降低质量...",
                 )
                 out_kwargs["crf"] = 20
                 out_kwargs["b:v"] = "600k"
             else:
-                print(
+                ctx_print(
                     "File is still too large, transform failed. / "
                     "文件仍然过大，转换失败。",
                 )
                 output_path.unlink(missing_ok=True)
 
 
-def main() -> int:
+async def main() -> int:
     if args.input:
-        input_paths = Path(args.input)
-        if not input_paths.exists():
-            print("Input path does not exist / 输入文件路径不存在")
+        input_paths = [Path(x) for x in args.input]
+        if p := next((x for x in input_paths if not x.exists()), None):
+            print(f"Input path does not exist / 输入文件路径不存在 ({p})")
             return 1
-        input_paths = (
-            list(iter_all_files(input_paths)) if input_paths.is_dir() else [input_paths]
+        input_paths = flatten(
+            (list(iter_all_files(p)) if p.is_dir() else [p]) for p in input_paths
         )
     else:
         input_paths = flatten(
@@ -256,12 +303,25 @@ def main() -> int:
             return 1
         output_path.mkdir(parents=True)
 
-    for it in input_paths:
-        process_one(it, output_path / f"{it.stem}.webm")
+    async def _proc_one(path: Path):
+        processing_filename.set(path.name)
+        async with process_sem:
+            try:
+                await process_one(path, output_path / f"{path.stem}.webm")
+            except Exception:
+                ctx_print("Error while processing / 处理时出错")
+                traceback.print_exc()
 
+    tasks = WeakSet[Task]()
+    for path in input_paths:
+        while process_sem.locked():
+            await asyncio.sleep(0)
+        tasks.add(asyncio.create_task(_proc_one(path)))
+
+    await asyncio.gather(*tasks)
     print("All Done! / 全部搞定！")
     return 0
 
 
 if __name__ == "__main__":
-    exit(main())
+    exit(asyncio.run(main()))

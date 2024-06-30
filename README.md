@@ -13,7 +13,7 @@ This is a simple script that converts a video or gif file to Telegram WebM video
   需要的 Python 包：（使用下面的命令安装）
 
   ```bash
-  pip install cookit ffmpeg-python
+  pip install "cookit[pyd]" ffmpeg-python
   ```
 
 ## Usage / 用法
