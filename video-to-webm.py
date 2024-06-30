@@ -282,9 +282,7 @@ async def main() -> int:
         if p := next((x for x in input_paths if not x.exists()), None):
             print(f"Input path does not exist / 输入文件路径不存在 ({p})")
             return 1
-        input_paths = flatten(
-            (list(iter_all_files(p)) if p.is_dir() else [p]) for p in input_paths
-        )
+        input_paths = flatten(list(iter_all_files(p)) for p in input_paths)
     else:
         input_paths = flatten(
             input_multi(
