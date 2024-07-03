@@ -43,7 +43,7 @@ parser.add_argument(
     "--nearest",
     action=BooleanOptionalAction,
     default=None,
-    help="use nearest neighbor scaling / 是否使用最近邻插值缩放",
+    help="always (not) use nearest neighbor scaling / 是否始终（不）使用最近邻插值缩放",
 )
 parser.add_argument(
     "-y",
@@ -204,6 +204,7 @@ async def process_one(input_path: Path, output_path: Path):
         use_nearest = (
             ctx_prompt(
                 "Use nearest neighbor scaling? / 是否使用最近邻插值缩放？",
+                default=(input_info.width <= 512) and (input_info.height <= 512),
             )
             if args.nearest is None
             else bool(args.nearest)
